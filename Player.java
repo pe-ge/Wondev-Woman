@@ -21,7 +21,9 @@ class Action {
     String dir1;
     String dir2;
 
-    int level; // when action executed
+    // when action executed
+    Point position;
+    int level;
 
     public Action(String atype, int index, String dir1, String dir2) {
         this.atype = atype;
@@ -141,7 +143,7 @@ class Player {
         return state.map[y][x] != '.' && state.map[y][x] != '4';
     }
 
-    public Point move(int x, int y, String moveAction) {
+    public Point next(int x, int y, String moveAction) {
         Point direction = actionToPos.get(moveAction);
         return new Point(x + direction.x, y + direction.y);
     }
@@ -150,19 +152,22 @@ class Player {
         Action bestAction = new Action("MOVE&BUILD", 0, null, null);
         for (String direction : directions) {
             // System.err.println(action);
-            Point nextPosition = move(state.unitX, state.unitY, direction);
+            Point nextPosition = next(state.unitX, state.unitY, direction);
             if (!checkPosition(nextPosition)) {
                 continue;
             }
             char nextLevel = state.map[nextPosition.y][nextPosition.x];
             if (nextLevel == state.unitLevel + 1) {
                 bestAction.dir1 = direction;
-                System.err.println(nextPosition);
+                bestAction.level = nextLevel;
+                bestAction.position = nextPosition;
+                // System.err.println(nextPosition);
                 return bestAction;
             }
-            if (nextLevel > bestAction.level) {
+            if (nextLevel > bestAction.level && nextLevel <= state.unitLevel + 1) {
                 bestAction.dir1 = direction;
                 bestAction.level = nextLevel;
+                bestAction.position = nextPosition;
             }
 
         }
@@ -177,14 +182,18 @@ class Player {
     }
 
     public Action findBuild(Action action) {
-        Point nextPosition = move(state.unitX, state.unitY, action.dir1);
+        Point nextPosition = action.position;
+        char maxLevel = '0';
         for (String direction : directions) {
-            Point buildPosition = move(nextPosition.x, nextPosition.y, direction);
+            Point buildPosition = next(nextPosition.x, nextPosition.y, direction);
             if (!checkPosition(buildPosition)) {
                 continue;
             }
-            action.dir2 = direction;
-            break;
+            char level = state.map[buildPosition.y][buildPosition.x];
+            if (level >= maxLevel && level <= action.level) {
+                maxLevel = level;
+                action.dir2 = direction;
+            }
         }
         return action;
     }
