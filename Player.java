@@ -141,18 +141,16 @@ class Player {
         return state.map[y][x] != '.' && state.map[y][x] != '4';
     }
 
-    public Point move(String moveAction) {
+    public Point move(int x, int y, String moveAction) {
         Point direction = actionToPos.get(moveAction);
-        return new Point(state.unitX + direction.x, state.unitY + direction.y);
+        return new Point(x + direction.x, y + direction.y);
     }
 
-    public Action getAction() {
+    public Action findMove() {
         Action bestAction = new Action("MOVE&BUILD", 0, null, null);
-        int randomIdx = random.nextInt(directions.size());
-        bestAction.dir2 = directions.get(randomIdx);
         for (String direction : directions) {
             // System.err.println(action);
-            Point nextPosition = move(direction);
+            Point nextPosition = move(state.unitX, state.unitY, direction);
             if (!checkPosition(nextPosition)) {
                 continue;
             }
@@ -171,17 +169,32 @@ class Player {
 
         if (bestAction.dir1 == null) {
             System.err.println("No suitable action found");
-            randomIdx = random.nextInt(directions.size());
+            int randomIdx = random.nextInt(directions.size());
             bestAction.dir1 = directions.get(randomIdx);
         }
 
         return bestAction;
     }
 
+    public Action findBuild(Action action) {
+        Point nextPosition = move(state.unitX, state.unitY, action.dir1);
+        for (String direction : directions) {
+            Point buildPosition = move(nextPosition.x, nextPosition.y, direction);
+            if (!checkPosition(buildPosition)) {
+                continue;
+            }
+            action.dir2 = direction;
+            break;
+        }
+        return action;
+    }
+
     public void mainLoop() {
         while (true) {
             state.readState(input);
-            System.out.println(getAction());
+            Action action = findMove();
+            action = findBuild(action);
+            System.out.println(action);
         }
     }
 
