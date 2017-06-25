@@ -21,6 +21,8 @@ class Action {
     String dir1;
     String dir2;
 
+    int level; // when action executed
+
     public Action(String atype, int index, String dir1, String dir2) {
         this.atype = atype;
         this.index = index;
@@ -79,6 +81,7 @@ class State {
         unitLevel = map[unitY][unitX];
         otherLevel = map[otherY][otherY];
     }
+
 }
 
 class Player {
@@ -91,6 +94,7 @@ class Player {
     State state;
 
     HashMap<String, Point> actionToPos; // action -> (x, y)
+    ArrayList<String> directions;
 
     Random random;
 
@@ -112,12 +116,17 @@ class Player {
         actionToPos.put("S",    new Point(0, 1));
         actionToPos.put("SE",   new Point(1, 1));
 
-        random = new Random();
-    }
+        directions = new ArrayList<String>();
+        directions.add("NW");
+        directions.add("N");
+        directions.add("NE");
+        directions.add("W");
+        directions.add("E");
+        directions.add("SW");
+        directions.add("S");
+        directions.add("SE");
 
-    public Point move(int x, int y, String moveAction) {
-        Point direction = actionToPos.get(moveAction);
-        return new Point(x + direction.x, y + direction.y);
+        random = new Random();
     }
 
     public boolean checkPosition(Point position) {
@@ -126,34 +135,44 @@ class Player {
         if (state.otherX == x && state.otherY == y) {
             return false;
         }
-        if (x > 0 && y > 0 && x < size && y < size) {
-            return true;
+        if (x < 0 || y < 0 || x >= size || y >= size) {
+            return false;
         }
-        return false;
+        return state.map[y][x] != '.' && state.map[y][x] != '4';
+    }
+
+    public Point move(String moveAction) {
+        Point direction = actionToPos.get(moveAction);
+        return new Point(state.unitX + direction.x, state.unitY + direction.y);
     }
 
     public Action getAction() {
-        Action bestAction = null;
-        for (Action action : state.actions) {
+        Action bestAction = new Action("MOVE&BUILD", 0, null, null);
+        int randomIdx = random.nextInt(directions.size());
+        bestAction.dir2 = directions.get(randomIdx);
+        for (String direction : directions) {
             // System.err.println(action);
-            Point nextPosition = move(state.unitX, state.unitY, action.dir1);
+            Point nextPosition = move(direction);
             if (!checkPosition(nextPosition)) {
                 continue;
             }
-            int nextLevel = state.map[nextPosition.y][nextPosition.x];
-            if (nextLevel == '3') {
-                System.err.println(nextPosition);
-                return action;
-            }
+            char nextLevel = state.map[nextPosition.y][nextPosition.x];
             if (nextLevel == state.unitLevel + 1) {
-                bestAction = action;
+                bestAction.dir1 = direction;
+                System.err.println(nextPosition);
+                return bestAction;
+            }
+            if (nextLevel > bestAction.level) {
+                bestAction.dir1 = direction;
+                bestAction.level = nextLevel;
             }
 
         }
 
-        if (bestAction == null) {
-            int randomIdx = random.nextInt(state.actions.size());
-            bestAction = state.actions.get(randomIdx);
+        if (bestAction.dir1 == null) {
+            System.err.println("No suitable action found");
+            randomIdx = random.nextInt(directions.size());
+            bestAction.dir1 = directions.get(randomIdx);
         }
 
         return bestAction;
