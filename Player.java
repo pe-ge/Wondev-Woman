@@ -10,6 +10,11 @@ class Point {
         this.y = y;
     }
 
+    public Point(Point other) {
+        this.x = other.x;
+        this.y = other.y;
+    }
+
     public String toString() {
         return String.format("(x=%d, y=%d)", x, y);
     }
@@ -17,25 +22,28 @@ class Point {
     public boolean equals(Point other) {
         return this.x == other.x && this.y == other.y;
     }
+
+    public int distance(Point other) {
+        return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
+    }
 }
 
 class Unit {
     Point position;
-    char level;
 
-    static HashMap<String, Point> actionToPos; // action -> (x, y)
+    static HashMap<String, Point> actionToDirection; // action -> (x, y)
     static HashMap<String, String[]> pushToDirections;
 
     static {
-        actionToPos = new HashMap<String, Point>();
-        actionToPos.put("NW",   new Point(-1, -1));
-        actionToPos.put("N",    new Point(0, -1));
-        actionToPos.put("NE",   new Point(1, -1));
-        actionToPos.put("W",    new Point(-1, 0));
-        actionToPos.put("E",    new Point(1, 0));
-        actionToPos.put("SW",   new Point(-1, 1));
-        actionToPos.put("S",    new Point(0, 1));
-        actionToPos.put("SE",   new Point(1, 1));
+        actionToDirection = new HashMap<String, Point>();
+        actionToDirection.put("NW",   new Point(-1, -1));
+        actionToDirection.put("N",    new Point(0, -1));
+        actionToDirection.put("NE",   new Point(1, -1));
+        actionToDirection.put("W",    new Point(-1, 0));
+        actionToDirection.put("E",    new Point(1, 0));
+        actionToDirection.put("SW",   new Point(-1, 1));
+        actionToDirection.put("S",    new Point(0, 1));
+        actionToDirection.put("SE",   new Point(1, 1));
 
         pushToDirections = new HashMap<String, String[]>();
         pushToDirections.put("NW",  new String[]{"N", "NW", "W"});
@@ -48,18 +56,20 @@ class Unit {
         pushToDirections.put("SE",  new String[]{"S", "SE", "E"});
     }
 
+    public static Point getDirection(String action) {
+        return actionToDirection.get(action);
+    }
+
     public Unit(int x, int y) {
         this.position = new Point(x, y);
     }
 
     public Unit(int x, int y, char[][] map) {
         this(x, y);
-        this.level = map[y][x];
     }
 
     public Unit(Unit other) {
         this(other.position.x, other.position.y);
-        this.level = other.level;
     }
 
     public String toString() {
@@ -77,14 +87,14 @@ class Unit {
     }
 
     public void push(String push, String where, Unit[] pushedUnits) {
-        Point pushDirection = actionToPos.get(push);
+        Point pushDirection = actionToDirection.get(push);
         int x = position.x + pushDirection.x;
         int y = position.y + pushDirection.y;
 
         for (Unit unit : pushedUnits) {
             if (unit.position.x == x && unit.position.y == y) {
                 // we found unit to be pushed
-                Point whereDirection = actionToPos.get(where);
+                Point whereDirection = actionToDirection.get(where);
                 unit.position.x += whereDirection.x;
                 unit.position.y += whereDirection.y;
                 return;
@@ -95,13 +105,13 @@ class Unit {
     }
 
     public void move(String move) {
-        Point direction = actionToPos.get(move);
+        Point direction = actionToDirection.get(move);
         position.x += direction.x;
         position.y += direction.y;
     }
 
     public void build(String build, char[][] map) {
-        Point direction = actionToPos.get(build);
+        Point direction = actionToDirection.get(build);
         map[position.y + direction.y][position.x + direction.x]++;
     }
 }
@@ -112,15 +122,38 @@ class Action {
     String move;
     String build;
 
-    // when action executed
-    Point position;
-    int level;
+    Point moveFrom;
+    Point moveTo;
+    Point buildTo;
+    char levelFrom;
+    char levelTo;
+    char buildHeight;
 
     public Action(String atype, int index, String move, String build) {
         this.atype = atype;
         this.index = index;
         this.move = move;
         this.build = build;
+    }
+
+    public Action(String atype, int index, String move, String build, State state) {
+        this(atype, index, move, build);
+
+        this.moveFrom = state.myUnits[index].position;
+
+        this.moveTo = new Point(moveFrom);
+        Point moveDirection = Unit.getDirection(move);
+        this.moveTo.x += moveDirection.x;
+        this.moveTo.y += moveDirection.y;
+
+        this.buildTo = new Point(moveTo);
+        Point buildDirection = Unit.getDirection(build);
+        this.buildTo.x += buildDirection.x;
+        this.buildTo.y += buildDirection.y;
+
+        this.levelFrom = state.map[moveFrom.y][moveFrom.x];
+        this.levelTo = state.map[moveTo.y][moveTo.x];
+        this.buildHeight = state.map[buildTo.y][buildTo.x];
     }
 
     public String toString() {
@@ -130,12 +163,14 @@ class Action {
 
 class State {
     static int size;
-    static int unitsPerGame;
+    static int unitsPerPlayer;
 
     char[][] map;
 
     Unit[] myUnits;
     Unit[] enemyUnits;
+
+    ArrayList<Action> inputActions;
 
     boolean myUnitTurn;
 
@@ -166,23 +201,26 @@ class State {
             map[i] = row.toCharArray();
         }
 
-        myUnits = new Unit[unitsPerGame];
-        for (int i = 0; i < unitsPerGame; i++) {
+        myUnits = new Unit[unitsPerPlayer];
+        for (int i = 0; i < unitsPerPlayer; i++) {
             myUnits[i] = new Unit(input.nextInt(), input.nextInt(), map);
         }
-        enemyUnits = new Unit[unitsPerGame];
-        for (int i = 0; i < unitsPerGame; i++) {
+        enemyUnits = new Unit[unitsPerPlayer];
+        for (int i = 0; i < unitsPerPlayer; i++) {
             enemyUnits[i] = new Unit(input.nextInt(), input.nextInt(), map);
         }
         int legalActions = input.nextInt();
+        inputActions = new ArrayList<Action>(legalActions);
         for (int i = 0; i < legalActions; i++) {
             Action a = new Action(
                 input.next(), // atype
                 input.nextInt(), // index
                 input.next(), // move
-                input.next()
-            ); // build
-            System.err.println(a);
+                input.next(),
+                this
+            );
+            inputActions.add(a);
+            // System.err.println(a);
         }
     }
 
@@ -199,14 +237,14 @@ class State {
             }
             System.err.println();
         }
-        for (int i = 0; i < unitsPerGame; i++) {
+        for (int i = 0; i < unitsPerPlayer; i++) {
             System.err.println("My unit: " + myUnits[i]);
             System.err.println("Enemy unit: " + enemyUnits[i]);
         }
     }
 
-    public State copyState(boolean switchTurn) {
-        State copied = new State(this.myUnitTurn);
+    public State clone(boolean switchTurn) {
+        State copied = new State(switchTurn ? !this.myUnitTurn : this.myUnitTurn);
         copied.map = new char[size][size];
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
@@ -214,13 +252,12 @@ class State {
             }
         }
 
-        copied.myUnits = new Unit[unitsPerGame];
-        copied.enemyUnits = new Unit[unitsPerGame];
-        for (int i = 0; i < unitsPerGame; i++) {
+        copied.myUnits = new Unit[unitsPerPlayer];
+        copied.enemyUnits = new Unit[unitsPerPlayer];
+        for (int i = 0; i < unitsPerPlayer; i++) {
             copied.myUnits[i] = new Unit(myUnits[i]);
             copied.enemyUnits[i] = new Unit(enemyUnits[i]);
         }
-        copied.myUnitTurn = switchTurn ? !myUnitTurn : myUnitTurn;
 
         copied.myScore = myScore;
         copied.enemyScore = enemyScore;
@@ -265,7 +302,7 @@ class State {
     }
 
     public Point canBuild(String move, Point position, Unit[] units, Unit[] otherUnits, char[][] map) {
-        Point direction = Unit.actionToPos.get(move);
+        Point direction = Unit.actionToDirection.get(move);
         int x = position.x + direction.x;
         int y = position.y + direction.y;
 
@@ -298,7 +335,7 @@ class State {
     }
 
     public Unit getNeighbourUnit(Unit myUnit, String direction, Unit[] units, char[][] map) {
-        Point directionPoint = Unit.actionToPos.get(direction);
+        Point directionPoint = Unit.actionToDirection.get(direction);
         int x = myUnit.position.x + directionPoint.x;
         int y = myUnit.position.y + directionPoint.y;
 
@@ -315,34 +352,12 @@ class State {
         return null;
     }
 
-    // public Unit canPush(String push, Point position, Unit[] units, Unit[] otherUnits, char[][] map) {
-        // Point direction = Unit.actionToPos.get(push);
-        // int x = position.x + direction.x;
-        // int y = position.y + direction.y;
-
-        // if (!legalCell(x, y, map)) {
-            // return null;
-        // }
-
-        // for (Unit unit : otherUnits) {
-            // if (unit.position.x == x && unit.position.y == y) {
-                // int pushedX = x + direction.x;
-                // int pushedY = y + direction.y;
-                // if (legalCell(pushedX, pushedY, map)) {
-                    // return unit;
-                // }
-                // return null;
-            // }
-        // }
-        // return null;
-    // }
-
     public ArrayList<Action> legalActions() {
         ArrayList<Action> legalActions = new ArrayList<Action>();
         Unit[] units = myUnitTurn ? myUnits : enemyUnits;
         Unit[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
 
-        for (int i = 0; i < unitsPerGame; i++) {
+        for (int i = 0; i < unitsPerPlayer; i++) {
             Unit unit = units[i];
             // MOVE&BUILD
             // first move
@@ -387,7 +402,7 @@ class State {
     }
 }
 
-class Game {
+class Player {
 
     Scanner input;
 
@@ -395,105 +410,87 @@ class Game {
 
     Random random;
 
-    public Game() {
+    public int evaluate(Action action) {
+        if (action.atype.equals("PUSH&BUILD")) {
+            return -1000;
+        }
+        int helpsEnemy = 0;
+        int blocksEnemy = 0;
+        int buildOnThree = 0;
+        int buildHeight = 0;
+
+        for (Unit enemy : state.enemyUnits) {
+            if (enemy.position.x == -1) continue;
+            int enemyHeight = state.map[enemy.position.y][enemy.position.x];
+            int dist = action.buildTo.distance(enemy.position);
+            if (dist == 1 && action.buildHeight == '2' && enemyHeight >= '2') {
+                helpsEnemy = 1;
+            }
+            if (dist == 1 && action.buildHeight == '3' && enemyHeight >= '2') {
+                blocksEnemy = 1;
+            }
+            if (action.buildHeight == '3') {
+                buildOnThree = 1;
+            }
+        }
+        buildHeight = action.buildHeight;
+
+        return -10000 * helpsEnemy + 1000 * blocksEnemy + 100 * action.levelTo - 10 * buildOnThree + buildHeight;
+    }
+
+    public Action findBestAction() {
+        Action best = null;
+        int bestValue = Integer.MIN_VALUE;
+        for (Action action : state.inputActions) {
+            int actionValue = evaluate(action);
+            if (actionValue > bestValue) {
+                bestValue = actionValue;
+                best = action;
+            }
+        }
+        return best;
+    }
+
+    public Player() {
         input = new Scanner(System.in);
 
         State.size = input.nextInt();
-        State.unitsPerGame = input.nextInt();
+        State.unitsPerPlayer = input.nextInt();
 
         state = new State(true);
 
         random = new Random();
     }
 
-    public boolean checkPosition(Point position) {
-        int x = position.x;
-        int y = position.y;
-
-        if (x < 0 || y < 0 || x >= State.size || y >= State.size) {
-            return false;
-        }
-        // -2 == '.'
-        return state.map[y][x] != -2 && state.map[y][x] != 4 && state.map[y][x] <= 10;
-    }
-
-    // public Action findMove() {
-        // Action bestAction = new Action("MOVE&BUILD", 0, null, null);
-        // for (String direction : directions) {
-            // // System.err.println(action);
-            // Point nextPosition = next(state.myUnits[0].position, direction);
-
-            // if (!checkPosition(nextPosition)) {
-                // continue;
-            // }
-            // int nextPositionLevel = state.map[nextPosition.y][nextPosition.x];
-            // if (nextPositionLevel == state.myUnits[0].level + 1) {
-                // bestAction.move = direction;
-                // bestAction.level = nextPositionLevel;
-                // bestAction.position = nextPosition;
-                // // System.err.println(nextPosition);
-                // return bestAction;
-            // }
-            // if (nextPositionLevel >= bestAction.level && nextPositionLevel <= state.myUnits[0].level + 1) {
-                // bestAction.move = direction;
-                // bestAction.level = nextPositionLevel;
-                // bestAction.position = nextPosition;
-            // }
-
-        // }
-
-        // if (bestAction.move == null) {
-            // System.err.println("No possible action found");
-        // }
-
-        // return bestAction;
-    // }
-
-    // public Action findBuild(Action action) {
-        // Point nextPosition = action.position;
-        // int maxLevel = 0;
-        // for (String direction : directions) {
-            // Point buildPosition = next(nextPosition, direction);
-            // if (!checkPosition(buildPosition)) {
-                // continue;
-            // }
-            // int buildPositionLevel = state.map[buildPosition.y][buildPosition.x];
-            // if (buildPositionLevel >= maxLevel && buildPositionLevel <= action.level) {
-                // maxLevel = buildPositionLevel;
-                // action.build = direction;
-            // }
-        // }
-        // return action;
-    // }
-
     public void mainLoop() {
-        state.readState(input);
-        state.printMap();
-        while (true) {
-            long time = System.currentTimeMillis();
-            System.err.println(state.legalActions());
-            System.err.println("passed time for legal actions :" + (System.currentTimeMillis() - time));
-            Action a = new Action(
-                input.next(), // atype
-                input.nextInt(), // index
-                input.next(), // move
-                input.next()
-            ); // build
-            state.executeAction(a);
-            state.printMap();
-            System.err.println("SCORE: " + state.myScore);
-        }
+        // DEBUG
+        // state.readState(input);
+        // state.printMap();
         // while (true) {
-            // state.readState(input);
+            // long time = System.currentTimeMillis();
+            // System.err.println(state.legalActions());
+            // System.err.println("passed time for legal actions :" + (System.currentTimeMillis() - time));
+            // Action a = new Action(
+                // input.next(), // atype
+                // input.nextInt(), // index
+                // input.next(), // move
+                // input.next()
+            // ); // build
+            // state.executeAction(a);
+            // state.printMap();
+            // System.err.println("SCORE: " + state.myScore);
+        // }
+        while (true) {
+            state.readState(input);
             // state.printMap();
             // Action action = findMove();
             // action = findBuild(action);
-            // System.out.println(action);
-        // }
+            System.out.println(findBestAction());
+        }
     }
 
     public static void main(String args[]) {
-        Game Game = new Game();
-        Game.mainLoop();
+        Player player = new Player();
+        player.mainLoop();
     }
 }
