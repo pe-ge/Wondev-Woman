@@ -3,33 +3,8 @@ import java.io.*;
 import java.math.*;
 
 class Point {
+
     int x, y;
-
-    public Point(int x, int y) {
-        this.x = x;
-        this.y = y;
-    }
-
-    public Point(Point other) {
-        this.x = other.x;
-        this.y = other.y;
-    }
-
-    public String toString() {
-        return String.format("(x=%d, y=%d)", x, y);
-    }
-
-    public boolean equals(Point other) {
-        return this.x == other.x && this.y == other.y;
-    }
-
-    public int distance(Point other) {
-        return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
-    }
-}
-
-class Unit {
-    Point position;
 
     static HashMap<String, Point> actionToDirection; // action -> (x, y)
     static HashMap<String, String[]> pushToDirections;
@@ -56,24 +31,30 @@ class Unit {
         pushToDirections.put("SE",  new String[]{"S", "SE", "E"});
     }
 
-    public static Point getDirection(String action) {
-        return actionToDirection.get(action);
+    public Point(int x, int y) {
+        this.x = x;
+        this.y = y;
     }
 
-    public Unit(int x, int y) {
-        this.position = new Point(x, y);
-    }
-
-    public Unit(int x, int y, char[][] map) {
-        this(x, y);
-    }
-
-    public Unit(Unit other) {
-        this(other.position.x, other.position.y);
+    public Point(Point other) {
+        this.x = other.x;
+        this.y = other.y;
     }
 
     public String toString() {
-        return position.toString();
+        return String.format("(x=%d, y=%d)", x, y);
+    }
+
+    public boolean equals(Point other) {
+        return this.x == other.x && this.y == other.y;
+    }
+
+    public int distance(Point other) {
+        return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
+    }
+
+    public static Point getDirection(String action) {
+        return actionToDirection.get(action);
     }
 
     public void moveAndBuild(Action action, char[][] map) {
@@ -81,22 +62,22 @@ class Unit {
         build(action.build, map);
     }
 
-    public void pushAndBuild(Action action, Unit[] pushedUnits, char[][] map) {
+    public void pushAndBuild(Action action, Point[] pushedUnits, char[][] map) {
         push(action.move, action.build, pushedUnits);
         build(action.move, map);
     }
 
-    public void push(String push, String where, Unit[] pushedUnits) {
+    public void push(String push, String where, Point[] pushedUnits) {
         Point pushDirection = actionToDirection.get(push);
-        int x = position.x + pushDirection.x;
-        int y = position.y + pushDirection.y;
+        int x = this.x + pushDirection.x;
+        int y = this.y + pushDirection.y;
 
-        for (Unit unit : pushedUnits) {
-            if (unit.position.x == x && unit.position.y == y) {
+        for (Point unit : pushedUnits) {
+            if (unit.x == x && unit.y == y) {
                 // we found unit to be pushed
                 Point whereDirection = actionToDirection.get(where);
-                unit.position.x += whereDirection.x;
-                unit.position.y += whereDirection.y;
+                unit.x += whereDirection.x;
+                unit.y += whereDirection.y;
                 return;
             }
         }
@@ -106,13 +87,13 @@ class Unit {
 
     public void move(String move) {
         Point direction = actionToDirection.get(move);
-        position.x += direction.x;
-        position.y += direction.y;
+        x += direction.x;
+        y += direction.y;
     }
 
     public void build(String build, char[][] map) {
         Point direction = actionToDirection.get(build);
-        map[position.y + direction.y][position.x + direction.x]++;
+        map[y + direction.y][x + direction.x]++;
     }
 }
 
@@ -139,15 +120,15 @@ class Action {
     public Action(String atype, int index, String move, String build, State state) {
         this(atype, index, move, build);
 
-        this.moveFrom = state.myUnits[index].position;
+        this.moveFrom = state.myUnits[index];
 
         this.moveTo = new Point(moveFrom);
-        Point moveDirection = Unit.getDirection(move);
+        Point moveDirection = Point.getDirection(move);
         this.moveTo.x += moveDirection.x;
         this.moveTo.y += moveDirection.y;
 
         this.buildTo = new Point(moveTo);
-        Point buildDirection = Unit.getDirection(build);
+        Point buildDirection = Point.getDirection(build);
         this.buildTo.x += buildDirection.x;
         this.buildTo.y += buildDirection.y;
 
@@ -167,8 +148,8 @@ class State {
 
     char[][] map;
 
-    Unit[] myUnits;
-    Unit[] enemyUnits;
+    Point[] myUnits;
+    Point[] enemyUnits;
 
     ArrayList<Action> inputActions;
 
@@ -201,13 +182,13 @@ class State {
             map[i] = row.toCharArray();
         }
 
-        myUnits = new Unit[unitsPerPlayer];
+        myUnits = new Point[unitsPerPlayer];
         for (int i = 0; i < unitsPerPlayer; i++) {
-            myUnits[i] = new Unit(input.nextInt(), input.nextInt(), map);
+            myUnits[i] = new Point(input.nextInt(), input.nextInt());
         }
-        enemyUnits = new Unit[unitsPerPlayer];
+        enemyUnits = new Point[unitsPerPlayer];
         for (int i = 0; i < unitsPerPlayer; i++) {
-            enemyUnits[i] = new Unit(input.nextInt(), input.nextInt(), map);
+            enemyUnits[i] = new Point(input.nextInt(), input.nextInt());
         }
         int legalActions = input.nextInt();
         inputActions = new ArrayList<Action>(legalActions);
@@ -252,11 +233,11 @@ class State {
             }
         }
 
-        copied.myUnits = new Unit[unitsPerPlayer];
-        copied.enemyUnits = new Unit[unitsPerPlayer];
+        copied.myUnits = new Point[unitsPerPlayer];
+        copied.enemyUnits = new Point[unitsPerPlayer];
         for (int i = 0; i < unitsPerPlayer; i++) {
-            copied.myUnits[i] = new Unit(myUnits[i]);
-            copied.enemyUnits[i] = new Unit(enemyUnits[i]);
+            copied.myUnits[i] = new Point(myUnits[i]);
+            copied.enemyUnits[i] = new Point(enemyUnits[i]);
         }
 
         copied.myScore = myScore;
@@ -266,11 +247,11 @@ class State {
     }
 
     public State executeAction(Action action) {
-        Unit executingUnit = myUnitTurn ? myUnits[action.index] : enemyUnits[action.index];
+        Point executingUnit = myUnitTurn ? myUnits[action.index] : enemyUnits[action.index];
         switch (action.atype) {
             case "MOVE&BUILD":
                 executingUnit.moveAndBuild(action, map);
-                if (map[executingUnit.position.y][executingUnit.position.x] == '3') {
+                if (map[executingUnit.y][executingUnit.x] == '3') {
                     if (myUnitTurn) {
                         myScore++;
                     } else {
@@ -279,14 +260,14 @@ class State {
                 }
                 break;
             case "PUSH&BUILD":
-                Unit[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
+                Point[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
                 executingUnit.pushAndBuild(action, otherUnits, map);
                 break;
         }
         return this;
     }
 
-    public Point canMove(String move, Point position, Unit[] units, Unit[] otherUnits, char[][] map) {
+    public Point canMove(String move, Point position, Point[] units, Point[] otherUnits, char[][] map) {
         Point moveTo = canBuild(move, position, units, otherUnits, map);
         if (moveTo == null) {
             return null;
@@ -301,8 +282,8 @@ class State {
         return moveTo;
     }
 
-    public Point canBuild(String move, Point position, Unit[] units, Unit[] otherUnits, char[][] map) {
-        Point direction = Unit.actionToDirection.get(move);
+    public Point canBuild(String move, Point position, Point[] units, Point[] otherUnits, char[][] map) {
+        Point direction = Point.actionToDirection.get(move);
         int x = position.x + direction.x;
         int y = position.y + direction.y;
 
@@ -310,13 +291,13 @@ class State {
             return null;
         }
 
-        for (Unit unit : units) {
-            if (unit.position.x == x && unit.position.y == y) {
+        for (Point unit : units) {
+            if (unit.x == x && unit.y == y) {
                 return null;
             }
         }
-        for (Unit unit : otherUnits) {
-            if (unit.position.x == x && unit.position.y == y) {
+        for (Point unit : otherUnits) {
+            if (unit.x == x && unit.y == y) {
                 return null;
             }
         }
@@ -334,17 +315,17 @@ class State {
         return true;
     }
 
-    public Unit getNeighbourUnit(Unit myUnit, String direction, Unit[] units, char[][] map) {
-        Point directionPoint = Unit.actionToDirection.get(direction);
-        int x = myUnit.position.x + directionPoint.x;
-        int y = myUnit.position.y + directionPoint.y;
+    public Point getNeighbourUnit(Point myUnit, String direction, Point[] units, char[][] map) {
+        Point directionPoint = Point.actionToDirection.get(direction);
+        int x = myUnit.x + directionPoint.x;
+        int y = myUnit.y + directionPoint.y;
 
         if (!legalCell(x, y, map)) {
             return null;
         }
 
-        for (Unit unit : units) {
-            if (unit.position.x == x && unit.position.y == y) {
+        for (Point unit : units) {
+            if (unit.x == x && unit.y == y) {
                 return unit;
             }
         }
@@ -354,21 +335,21 @@ class State {
 
     public ArrayList<Action> legalActions() {
         ArrayList<Action> legalActions = new ArrayList<Action>();
-        Unit[] units = myUnitTurn ? myUnits : enemyUnits;
-        Unit[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
+        Point[] units = myUnitTurn ? myUnits : enemyUnits;
+        Point[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
 
         for (int i = 0; i < unitsPerPlayer; i++) {
-            Unit unit = units[i];
+            Point unit = units[i];
             // MOVE&BUILD
             // first move
             for (String moveDirection : directions) {
-                Point movePoint = canMove(moveDirection, unit.position, units, otherUnits, map);
+                Point movePoint = canMove(moveDirection, unit, units, otherUnits, map);
                 if (movePoint != null) {
                     // then build
-                    int tmpX = unit.position.x;
-                    int tmpY = unit.position.y;
-                    unit.position.x = -1;
-                    unit.position.y = -1;
+                    int tmpX = unit.x;
+                    int tmpY = unit.y;
+                    unit.x = -1;
+                    unit.y = -1;
                     for (String buildDirection : directions) {
                         Point buildPoint = canBuild(buildDirection, movePoint, units, otherUnits, map);
                         if (buildPoint != null) {
@@ -376,20 +357,20 @@ class State {
                             legalActions.add(action);
                         }
                     }
-                    unit.position.x = tmpX;
-                    unit.position.y = tmpY;
+                    unit.x = tmpX;
+                    unit.y = tmpY;
                 }
             }
 
             // PUSH&BUILD
             // push
             for (String pushDirection : directions) {
-                Unit pushedUnit = getNeighbourUnit(unit, pushDirection, otherUnits, map);
+                Point pushedUnit = getNeighbourUnit(unit, pushDirection, otherUnits, map);
                 if (pushedUnit != null) {
                     // System.err.println("mozem tiskat " + pushDirection);
-                    for (String moveDirection : Unit.pushToDirections.get(pushDirection)) {
+                    for (String moveDirection : Point.pushToDirections.get(pushDirection)) {
                         // check whether pushedTo position is free
-                        Point pushedTo = canMove(moveDirection, pushedUnit.position, units, otherUnits, map);
+                        Point pushedTo = canMove(moveDirection, pushedUnit, units, otherUnits, map);
                         if (pushedTo != null) {
                             Action action = new Action("PUSH&BUILD", i, pushDirection, moveDirection);
                             legalActions.add(action);
@@ -419,10 +400,10 @@ class Player {
         int buildOnThree = 0;
         int buildHeight = 0;
 
-        for (Unit enemy : state.enemyUnits) {
-            if (enemy.position.x == -1) continue;
-            int enemyHeight = state.map[enemy.position.y][enemy.position.x];
-            int dist = action.buildTo.distance(enemy.position);
+        for (Point enemy : state.enemyUnits) {
+            if (enemy.x == -1) continue;
+            int enemyHeight = state.map[enemy.y][enemy.x];
+            int dist = action.buildTo.distance(enemy);
             if (dist == 1 && action.buildHeight == '2' && enemyHeight >= '2') {
                 helpsEnemy = 1;
             }
