@@ -32,11 +32,19 @@ class Point {
     }
 
     public Point(int x, int y) {
+        set(x, y);
+    }
+
+    public Point(Point other) {
+        set(other);
+    }
+
+    public void set(int x, int y) {
         this.x = x;
         this.y = y;
     }
 
-    public Point(Point other) {
+    public void set(Point other) {
         this.x = other.x;
         this.y = other.y;
     }
@@ -106,35 +114,73 @@ class Action {
     Point moveFrom;
     Point moveTo;
     Point buildTo;
-    char levelFrom;
-    char levelTo;
-    char buildHeight;
+    int moveFromLevel;
+    int moveToLevel;
+    int buildLevelBefore;
+
+    Point pushFrom;
+    Point pushTo;
+    int pushFromLevel;
+    int pushToLevel;
+
+    State before;
+    State after;
 
     public Action(String atype, int index, String move, String build) {
         this.atype = atype;
         this.index = index;
         this.move = move;
         this.build = build;
+
+        this.moveFrom = new Point(-1, -1);
+        this.moveTo = new Point(-1, -1);
+        this.buildTo = new Point(-1, -1);
+
+        this.pushFrom = new Point(-1, -1);
+        this.pushTo = new Point(-1, -1);
     }
 
     public Action(String atype, int index, String move, String build, State state) {
         this(atype, index, move, build);
+        computeParams(state);
 
-        this.moveFrom = state.myUnits[index];
+        before = state;
+        after = before.clone(false);
+        after.executeAction(this);
+    }
 
-        this.moveTo = new Point(moveFrom);
-        Point moveDirection = Point.getDirection(move);
-        this.moveTo.x += moveDirection.x;
-        this.moveTo.y += moveDirection.y;
+    public void computeParams(State state) {
+        if (this.atype.equals("MOVE&BUILD")) {
+            this.moveFrom = state.myUnits[index];
 
-        this.buildTo = new Point(moveTo);
-        Point buildDirection = Point.getDirection(build);
-        this.buildTo.x += buildDirection.x;
-        this.buildTo.y += buildDirection.y;
+            Point moveDirection = Point.getDirection(move);
+            this.moveTo.x = moveFrom.x + moveDirection.x;
+            this.moveTo.y = moveFrom.y + moveDirection.y;
 
-        this.levelFrom = state.map[moveFrom.y][moveFrom.x];
-        this.levelTo = state.map[moveTo.y][moveTo.x];
-        this.buildHeight = state.map[buildTo.y][buildTo.x];
+            Point buildDirection = Point.getDirection(build);
+            this.buildTo.x = moveTo.x + buildDirection.x;
+            this.buildTo.y = moveTo.y + buildDirection.y;
+
+            this.moveFromLevel = state.getLevel(moveFrom);
+            this.moveToLevel = state.getLevel(moveTo);
+            this.buildLevelBefore = state.getLevel(buildTo);
+        } else { // PUSH&BUILD
+            this.moveFrom = state.myUnits[index];
+
+            Point unitDirection = Point.getDirection(move);
+            this.pushFrom.x = moveFrom.x + unitDirection.x;
+            this.pushFrom.y = moveFrom.y + unitDirection.y;
+            this.pushFromLevel = state.getLevel(pushFrom);
+
+            Point pushDirection = Point.getDirection(build);
+            this.pushTo.x = pushFrom.x + pushDirection.x;
+            this.pushTo.y = pushFrom.y + pushDirection.y;
+            this.pushToLevel = state.getLevel(pushTo);
+
+            this.buildTo.x = this.pushFrom.x;
+            this.buildTo.y = this.pushFrom.y;
+            this.buildLevelBefore = state.getLevel(buildTo);
+        }
     }
 
     public String toString() {
@@ -150,6 +196,7 @@ class State {
 
     Point[] myUnits;
     Point[] enemyUnits;
+    Point[] prevPositions;
 
     ArrayList<Action> inputActions;
 
@@ -174,6 +221,15 @@ class State {
     public State(boolean myUnitTurn) {
         map = new char[size][size];
         this.myUnitTurn = myUnitTurn;
+
+        myUnits = new Point[unitsPerPlayer];
+        enemyUnits = new Point[unitsPerPlayer];
+        prevPositions = new Point[unitsPerPlayer];
+        for (int i = 0; i < unitsPerPlayer; i++) {
+            myUnits[i] = new Point(-1, -1);
+            enemyUnits[i] = new Point(-1, -1);
+            prevPositions[i] = new Point(-1, -1);
+        }
     }
 
     public void readState(Scanner input) {
@@ -182,13 +238,12 @@ class State {
             map[i] = row.toCharArray();
         }
 
-        myUnits = new Point[unitsPerPlayer];
         for (int i = 0; i < unitsPerPlayer; i++) {
-            myUnits[i] = new Point(input.nextInt(), input.nextInt());
+            myUnits[i].set(input.nextInt(), input.nextInt());
         }
-        enemyUnits = new Point[unitsPerPlayer];
         for (int i = 0; i < unitsPerPlayer; i++) {
-            enemyUnits[i] = new Point(input.nextInt(), input.nextInt());
+            prevPositions[i].set(enemyUnits[i]);
+            enemyUnits[i].set(input.nextInt(), input.nextInt());
         }
         int legalActions = input.nextInt();
         inputActions = new ArrayList<Action>(legalActions);
@@ -273,8 +328,8 @@ class State {
             return null;
         }
 
-        char currentLevel = map[position.y][position.x];
-        char moveToLevel = map[moveTo.y][moveTo.x];
+        int currentLevel = getLevel(position);
+        int moveToLevel = getLevel(moveTo);
         if (currentLevel + 1 < moveToLevel) {
             return null;
         }
@@ -333,53 +388,55 @@ class State {
         return null;
     }
 
-    public ArrayList<Action> legalActions() {
+    public ArrayList<Action> legalActions(int myUnitIdx) {
         ArrayList<Action> legalActions = new ArrayList<Action>();
         Point[] units = myUnitTurn ? myUnits : enemyUnits;
         Point[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
 
-        for (int i = 0; i < unitsPerPlayer; i++) {
-            Point unit = units[i];
-            // MOVE&BUILD
-            // first move
-            for (String moveDirection : directions) {
-                Point movePoint = canMove(moveDirection, unit, units, otherUnits, map);
-                if (movePoint != null) {
-                    // then build
-                    int tmpX = unit.x;
-                    int tmpY = unit.y;
-                    unit.x = -1;
-                    unit.y = -1;
-                    for (String buildDirection : directions) {
-                        Point buildPoint = canBuild(buildDirection, movePoint, units, otherUnits, map);
-                        if (buildPoint != null) {
-                            Action action = new Action("MOVE&BUILD", i, moveDirection, buildDirection);
-                            legalActions.add(action);
-                        }
+        Point unit = units[myUnitIdx];
+        // MOVE&BUILD
+        // first move
+        for (String moveDirection : directions) {
+            Point movePoint = canMove(moveDirection, unit, units, otherUnits, map);
+            if (movePoint != null) {
+                // then build
+                int tmpX = unit.x;
+                int tmpY = unit.y;
+                unit.x = -1;
+                unit.y = -1;
+                for (String buildDirection : directions) {
+                    Point buildPoint = canBuild(buildDirection, movePoint, units, otherUnits, map);
+                    if (buildPoint != null) {
+                        Action action = new Action("MOVE&BUILD", myUnitIdx, moveDirection, buildDirection);
+                        legalActions.add(action);
                     }
-                    unit.x = tmpX;
-                    unit.y = tmpY;
                 }
+                unit.x = tmpX;
+                unit.y = tmpY;
             }
+        }
 
-            // PUSH&BUILD
-            // push
-            for (String pushDirection : directions) {
-                Point pushedUnit = getNeighbourUnit(unit, pushDirection, otherUnits, map);
-                if (pushedUnit != null) {
-                    // System.err.println("mozem tiskat " + pushDirection);
-                    for (String moveDirection : Point.pushToDirections.get(pushDirection)) {
-                        // check whether pushedTo position is free
-                        Point pushedTo = canMove(moveDirection, pushedUnit, units, otherUnits, map);
-                        if (pushedTo != null) {
-                            Action action = new Action("PUSH&BUILD", i, pushDirection, moveDirection);
-                            legalActions.add(action);
-                        }
+        // PUSH&BUILD
+        // push
+        for (String pushDirection : directions) {
+            Point pushedUnit = getNeighbourUnit(unit, pushDirection, otherUnits, map);
+            if (pushedUnit != null) {
+                // System.err.println("mozem tiskat " + pushDirection);
+                for (String moveDirection : Point.pushToDirections.get(pushDirection)) {
+                    // check whether pushedTo position is free
+                    Point pushedTo = canMove(moveDirection, pushedUnit, units, otherUnits, map);
+                    if (pushedTo != null) {
+                        Action action = new Action("PUSH&BUILD", myUnitIdx, pushDirection, moveDirection);
+                        legalActions.add(action);
                     }
                 }
             }
         }
         return legalActions;
+    }
+
+    public int getLevel(Point point) {
+        return map[point.y][point.x] - '0';
     }
 }
 
@@ -393,8 +450,25 @@ class Player {
 
     public int evaluate(Action action) {
         if (action.atype.equals("PUSH&BUILD")) {
-            return -1000;
+            return evaluatePushAndBuild(action);
+        } else {
+            return evaluateMoveAndBuild(action);
         }
+    }
+
+    public int evaluatePushAndBuild(Action action) {
+        if (action.pushFromLevel >= action.pushToLevel + 1) {
+            return 100000;
+        }
+        int actionsBefore = action.before.legalActions(action.index).size();
+        int actionsAfter = action.after.legalActions(action.index).size();
+        if (actionsAfter == 0) {
+            return -100000;
+        }
+        return -1000;
+    }
+
+    public int evaluateMoveAndBuild(Action action) {
         int helpsEnemy = 0;
         int blocksEnemy = 0;
         int buildOnThree = 0;
@@ -402,21 +476,38 @@ class Player {
 
         for (Point enemy : state.enemyUnits) {
             if (enemy.x == -1) continue;
-            int enemyHeight = state.map[enemy.y][enemy.x];
+            int enemyHeight = state.getLevel(enemy);
             int dist = action.buildTo.distance(enemy);
-            if (dist == 1 && action.buildHeight == '2' && enemyHeight >= '2') {
+            if (dist == 1 && action.buildLevelBefore == 2 && enemyHeight >= 2) {
                 helpsEnemy = 1;
             }
-            if (dist == 1 && action.buildHeight == '3' && enemyHeight >= '2') {
+            if (dist == 1 && action.buildLevelBefore == 3 && enemyHeight >= 2) {
                 blocksEnemy = 1;
             }
-            if (action.buildHeight == '3') {
-                buildOnThree = 1;
-            }
         }
-        buildHeight = action.buildHeight;
+        if (action.buildLevelBefore == 3) {
+            buildOnThree = 1;
+        }
+        // System.err.println(action.buildLevelBefore);
 
-        return -10000 * helpsEnemy + 1000 * blocksEnemy + 100 * action.levelTo - 10 * buildOnThree + buildHeight;
+        int build = 0;
+        if (action.buildLevelBefore == action.moveToLevel) {
+            build = 2;
+        } else if (action.buildLevelBefore > action.moveToLevel) {
+            build = -1;
+        } else if (action.buildLevelBefore < action.moveToLevel) {
+            build = 1;
+        }
+
+        int actionsBefore = action.before.legalActions(action.index).size();
+        int actionsAfter = action.after.legalActions(action.index).size();
+        if (actionsAfter == 0) {
+            return -100000;
+        }
+
+        int actionsLost = actionsBefore - actionsAfter;
+
+        return -10000 * helpsEnemy + 1000 * blocksEnemy -100 * actionsLost + 100 * action.moveToLevel - 10 * buildOnThree + build;
     }
 
     public Action findBestAction() {
@@ -424,6 +515,7 @@ class Player {
         int bestValue = Integer.MIN_VALUE;
         for (Action action : state.inputActions) {
             int actionValue = evaluate(action);
+            //System.err.println(action + " " + actionValue);
             if (actionValue > bestValue) {
                 bestValue = actionValue;
                 best = action;
