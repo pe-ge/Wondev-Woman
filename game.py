@@ -1,5 +1,6 @@
 from random import randint, shuffle
 from collections import namedtuple
+from copy import deepcopy
 
 DIRECTIONS = [(-1, -1),
               (-1, 0),
@@ -57,7 +58,8 @@ class State():
 
         self.p1_score = 0
         self.p2_score = 0
-        self.my_turn = True if randint(0, 1) else False
+        # self.my_turn = True if randint(0, 1) else False
+        self.my_turn = True
 
     def __str__(self):
         result = ''
@@ -80,11 +82,12 @@ class State():
         result += '\n'
         result += str(self.p1_units) + '\n'
         result += str(self.p2_units) + '\n'
+        result += str(self.p1_score) + '\n'
+        result += str(self.p2_score) + '\n'
         return result
 
 
 class Action():
-
 
     def __init__(self, atype, index, dir1, dir2, state):
         def get_level(pos, state):
@@ -101,17 +104,24 @@ class Action():
         self.move_from = my_units[index]
 
         if atype == 'MOVE&BUILD':
-            self.move_to = [self.move_from[0] + dir1[0]][self.move_from[1] + dir1[1]]
-            self.build_to = [self.move_to[0] + dir2[0]][self.move_to[1] + dir2[1]]
-            self.move_from_level = get_level(self.move_from, state)
+            self.move_to = [self.move_from[0] + dir1[0], self.move_from[1] + dir1[1]]
+            self.build_to = [self.move_to[0] + dir2[0], self.move_to[1] + dir2[1]]
             self.move_to_level = get_level(self.move_to, state)
         else:
 
-            self.push_from = [self.move_from[0] + dir1[0]][self.move_from[1] + dir1[1]]
-            self.push_to = [self.move_to[0] + dir2[0]][self.move_to[1] + dir2[1]]
+            self.push_from = [self.move_from[0] + dir1[0], self.move_from[1] + dir1[1]]
+            self.push_to = [self.push_from[0] + dir2[0], self.push_from[1] + dir2[1]]
             self.build_to = self.push_from
+            self.push_from_level = get_level(self.push_from, state)
+            self.push_to_level = get_level(self.push_to, state)
 
+        self.move_from_level = get_level(self.move_from, state)
         self.build_level_before = get_level(self.build_to, state)
+
+        self.state_before = state
+        self.state_after = deepcopy(state)
+        self.state_after = execute(self.state_after, self)
+
 
 
     def __repr__(self):
