@@ -6,18 +6,19 @@ from deap import base
 from deap import creator
 from deap import tools
 
-from time import time
+from time import time, sleep
 
 
-OPPONENT = [-10000, 1000, -100, 100, -10, 1, 100000, -100000, -1000]
+# OPPONENT = [-10000, 1000, -100, 100, -10, 1, 100000, -100000, -1000]
+OPPONENT = [-8933, -4201, 7209, -2430, -3781, 2546, -4545, -7932, -195]
 NUM_WEIGHTS = len(OPPONENT)
 MUTATIONS = [-10000, -1000, -100, -10, -1, 1, 10, 100, 1000, 10000]
 
 
 def mutate(individual, indpb):
     for idx, attr in enumerate(individual):
-        individual[idx] += MUTATIONS[random.randint(0, len(MUTATIONS))]
-    return individual
+        individual[idx] += MUTATIONS[random.randint(0, len(MUTATIONS) - 1)]
+    return individual,
 
 
 def distance(unit1, unit2):
@@ -51,22 +52,23 @@ def evaluate(action, state, weights):
             build = 1
 
         # t1 = time()
-        actions_before = len(legal_actions(action.state_before))
-        actions_after = len(legal_actions(action.state_after))
+        # actions_before = len(legal_actions(action.state_before))
+        # actions_after = len(legal_actions(action.state_after))
         # print(time() - t1)
-        if actions_after == 0:
-            return -weights[7]
+        # if actions_after == 0:
+            # return -weights[7]
 
-        actions_lost = actions_before - actions_after
+        # actions_lost = actions_before - actions_after
+        actions_lost = 0
 
         return weights[0] * helps_enemy + weights[1] * blocks_enemy -weights[2] * actions_lost + weights[3] * action.move_to_level - weights[4] * build_on_three + weights[5] * build
     else:
         if action.push_from_level >= action.push_to_level + 1:
             return weights[6]
-        actions_before = len(legal_actions(action.state_before))
-        actions_after = len(legal_actions(action.state_after))
-        if actions_after == 0:
-            return -weights[7]
+        # actions_before = len(legal_actions(action.state_before))
+        # actions_after = len(legal_actions(action.state_after))
+        # if actions_after == 0:
+            # return -weights[7]
 
         return -weights[8]
 
@@ -85,9 +87,10 @@ def fitness(individual):
     first = True
     while True:
         # print(state)
+        # sleep(0.5)
         action = choose_best(state, individual) if first else choose_best(state, OPPONENT)
-        if action == None:
-            return state.p1_score - state.p2_score, 
+        if action is None:
+            return state.p1_score - state.p2_score,
 
         # print(individual)
         first = not first
@@ -118,7 +121,7 @@ toolbox.register("select", tools.selTournament, tournsize=3)
 def main():
     # random.seed(64)
 
-    pop = toolbox.population(n=3)
+    pop = toolbox.population(n=100)
 
     CXPB, MUTPB = 0.5, 0.2
 
@@ -170,9 +173,9 @@ def main():
 
         # Gather all the fitnesses in one list and print the stats
         fits = [ind.fitness.values[0] for ind in pop]
+        best_ind = tools.selBest(pop, 1)[0]
+        print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
 
-    best_ind = tools.selBest(pop, 1)[0]
-    print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
 
 
 if __name__ == "__main__":
