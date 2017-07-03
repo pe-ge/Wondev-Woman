@@ -145,8 +145,7 @@ class Action {
         computeParams(state);
 
         before = state;
-        after = before.clone(false);
-        after.executeAction(this);
+        after = before.executeAction(this, true);
     }
 
     public void computeParams(State state) {
@@ -200,8 +199,6 @@ class State {
 
     ArrayList<Action> inputActions;
 
-    boolean myUnitTurn;
-
     int myScore, enemyScore;
 
     static ArrayList<String> directions;
@@ -218,9 +215,8 @@ class State {
         directions.add("SE");
     }
 
-    public State(boolean myUnitTurn) {
+    public State() {
         map = new char[size][size];
-        this.myUnitTurn = myUnitTurn;
 
         myUnits = new Point[unitsPerPlayer];
         enemyUnits = new Point[unitsPerPlayer];
@@ -279,8 +275,8 @@ class State {
         }
     }
 
-    public State clone(boolean switchTurn) {
-        State copied = new State(switchTurn ? !this.myUnitTurn : this.myUnitTurn);
+    public State clone() {
+        State copied = new State();
         copied.map = new char[size][size];
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
@@ -301,25 +297,26 @@ class State {
         return copied;
     }
 
-    public State executeAction(Action action) {
-        Point executingUnit = myUnitTurn ? myUnits[action.index] : enemyUnits[action.index];
+    public State executeAction(Action action, boolean myUnitTurn) {
+        State nextState = this.clone();
+        Point executingUnit = myUnitTurn ? nextState.myUnits[action.index] : nextState.enemyUnits[action.index];
         switch (action.atype) {
             case "MOVE&BUILD":
-                executingUnit.moveAndBuild(action, map);
-                if (map[executingUnit.y][executingUnit.x] == '3') {
+                executingUnit.moveAndBuild(action, nextState.map);
+                if (nextState.map[executingUnit.y][executingUnit.x] == '3') {
                     if (myUnitTurn) {
-                        myScore++;
+                        nextState.myScore++;
                     } else {
-                        enemyScore++;
+                        nextState.enemyScore++;
                     }
                 }
                 break;
             case "PUSH&BUILD":
-                Point[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
-                executingUnit.pushAndBuild(action, otherUnits, map);
+                Point[] otherUnits = myUnitTurn ? nextState.enemyUnits : nextState.myUnits;
+                executingUnit.pushAndBuild(action, otherUnits, nextState.map);
                 break;
         }
-        return this;
+        return nextState;
     }
 
     public Point canMove(String move, Point position, Point[] units, Point[] otherUnits, char[][] map) {
@@ -388,15 +385,24 @@ class State {
         return null;
     }
 
-    public ArrayList<Action> legalActions(int myUnitIdx) {
+    public ArrayList<Action> legalActions(boolean myUnitTurn) {
+        ArrayList<Action> actions = new ArrayList<Action>();
+        for (int i = 0; i < unitsPerPlayer; i++) {
+            actions.addAll(legalActions(i, myUnitTurn));
+        }
+        return actions;
+    }
+
+    public ArrayList<Action> legalActions(int unitIdx, boolean myUnitTurn) {
         ArrayList<Action> legalActions = new ArrayList<Action>();
         Point[] units = myUnitTurn ? myUnits : enemyUnits;
         Point[] otherUnits = myUnitTurn ? enemyUnits : myUnits;
 
-        Point unit = units[myUnitIdx];
+        Point unit = units[unitIdx];
         // MOVE&BUILD
         // first move
         for (String moveDirection : directions) {
+            //System.err.println(unit + " " + moveDirection);
             Point movePoint = canMove(moveDirection, unit, units, otherUnits, map);
             if (movePoint != null) {
                 // then build
@@ -407,7 +413,7 @@ class State {
                 for (String buildDirection : directions) {
                     Point buildPoint = canBuild(buildDirection, movePoint, units, otherUnits, map);
                     if (buildPoint != null) {
-                        Action action = new Action("MOVE&BUILD", myUnitIdx, moveDirection, buildDirection);
+                        Action action = new Action("MOVE&BUILD", unitIdx, moveDirection, buildDirection);
                         legalActions.add(action);
                     }
                 }
@@ -426,7 +432,7 @@ class State {
                     // check whether pushedTo position is free
                     Point pushedTo = canMove(moveDirection, pushedUnit, units, otherUnits, map);
                     if (pushedTo != null) {
-                        Action action = new Action("PUSH&BUILD", myUnitIdx, pushDirection, moveDirection);
+                        Action action = new Action("PUSH&BUILD", unitIdx, pushDirection, moveDirection);
                         legalActions.add(action);
                     }
                 }
@@ -434,7 +440,6 @@ class State {
         }
         return legalActions;
     }
-
     public int getLevel(Point point) {
         return map[point.y][point.x] - '0';
     }
@@ -458,14 +463,14 @@ class Player {
 
     public int evaluatePushAndBuild(Action action) {
         if (action.pushFromLevel >= action.pushToLevel + 1) {
-            return 100000;
+            return 100000 * (action.pushFromLevel - action.pushToLevel + 1);
         }
-        int actionsBefore = action.before.legalActions(action.index).size();
-        int actionsAfter = action.after.legalActions(action.index).size();
+        int actionsBefore = action.before.legalActions(action.index, true).size();
+        int actionsAfter = action.after.legalActions(action.index, true).size();
         if (actionsAfter == 0) {
-            return -100000;
+            return -100000 * (actionsBefore - actionsAfter);
         }
-        return -1000;
+        return -1000 * (actionsBefore - actionsAfter);
     }
 
     public int evaluateMoveAndBuild(Action action) {
@@ -499,15 +504,15 @@ class Player {
             build = 1;
         }
 
-        int actionsBefore = action.before.legalActions(action.index).size();
-        int actionsAfter = action.after.legalActions(action.index).size();
+        int actionsBefore = action.before.legalActions(action.index, true).size();
+        int actionsAfter = action.after.legalActions(action.index, true).size();
         if (actionsAfter == 0) {
-            return -100000;
+            return -100000 * (actionsBefore - actionsAfter);
         }
 
         int actionsLost = actionsBefore - actionsAfter;
 
-        return -10000 * helpsEnemy + 1000 * blocksEnemy -100 * actionsLost + 100 * action.moveToLevel - 10 * buildOnThree + build;
+        return -10000 * helpsEnemy + 1000 * blocksEnemy -10 * actionsLost + 100 * action.moveToLevel - 5 * buildOnThree + build;
     }
 
     public Action findBestAction() {
@@ -530,7 +535,7 @@ class Player {
         State.size = input.nextInt();
         State.unitsPerPlayer = input.nextInt();
 
-        state = new State(true);
+        state = new State();
 
         random = new Random();
     }
